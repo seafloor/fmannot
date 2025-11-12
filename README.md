@@ -32,7 +32,7 @@ This project is managed with `uv` - install it [here](https://docs.astral.sh/uv/
 To browse downloaded data for Alzheimer's disease variants, use the streamlit app:
 
 ```bash
-streamlit run app/app.py
+uv run streamlit run app/app.py
 ```
 
 To query databases with your own snps, check out the examples in /notebooks. You can run jupyterlab as:

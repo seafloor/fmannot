@@ -321,7 +321,7 @@ def read_tracks_for_variant(rsid, output_type = 'rna_seq', store_path = 'out/tra
     except KeyError:
         print(f"Error: Could not find rsid '{selected_rsid}' in the Zarr store.")
 
-    variant_obj = set_variant(var_str_to_dict(variant_id_str))
+    variant = set_variant(var_str_to_dict(variant_id_str))
     
     # --- 6. NAVIGATE TO THE SPECIFIC GROUPS ---
     # This is the "Aha!" moment. We use the root object like a dictionary.
