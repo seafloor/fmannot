@@ -2,10 +2,14 @@ import re
 import pandas as pd
 import zarr
 from tqdm.notebook import tqdm
+from pathlib import Path
 from alphagenome.models import dna_client
 from alphagenome.models import variant_scorers
 from alphagenome.data import genome
 from alphagenome.data import track_data
+
+OUT_VEP_LOCAL_PATH = Path("out/effect_predictions.feather")
+OUT_GTP_LOCAL_PATH = Path("out/track_predictions.zarr")
 
 def set_variant(row):
     chrom, pos, ref, alt = str(row['chr']), row['position_grch38'], row['ref'], row['alt']
@@ -125,7 +129,10 @@ def reformat_vep(predicted_effects, snps, annot):
 
     return vep_out
 
-def save_all_effect_predictions(predicted_effects, snps, annot, store_path='out/effect_predictions.feather'):
+def save_all_effect_predictions(predicted_effects, snps, annot, store_path=OUT_VEP_LOCAL_PATH):
+    # ensure the 'out' directory exists
+    store_path.parent.mkdir(exist_ok=True)
+
     vep_out = reformat_vep(predicted_effects, snps, annot)
 
     vep_out.to_feather(store_path)
@@ -205,12 +212,15 @@ def save_generic_data(zarr_group: zarr.Group, data_obj):
         zarr_group.attrs['interval_end'] = data_obj.interval.end
         zarr_group.attrs['interval_strand'] = data_obj.interval.strand
 
-def save_all_track_predictions(predicted_tracks, snps, store_path = 'out/track_predictions.zarr'):
+def save_all_track_predictions(predicted_tracks, snps, store_path = OUT_GTP_LOCAL_PATH):
     ALL_OUTPUT_NAMES = [
         'atac', 'cage', 'dnase', 'rna_seq', 'chip_histone', 'chip_tf',
         'splice_sites', 'splice_site_usage', 'splice_junctions',
         'contact_maps', 'procap'
     ]
+
+    # ensure /out exists
+    store_path.parent.mkdir(exist_ok=True)
 
     print(f"Opening Zarr v3 store '{store_path}'...")
     root_group = zarr.open(store_path, mode='a')
@@ -298,7 +308,7 @@ def load_track_data_from_zarr(zarr_group: zarr.Group) -> track_data.TrackData:
     
     return reconstructed_tdata
 
-def read_tracks_for_variant(rsid, output_type = 'rna_seq', store_path = 'out/track_predictions.zarr'):
+def read_tracks_for_variant(rsid, output_type = 'rna_seq', store_path = OUT_GTP_LOCAL_PATH):
     # --- 3. OPEN THE ROOT STORE (THE "FILING CABINET") ---
     # We use mode='r' for read-only, which is safer.
     root = zarr.open(store_path, mode='r')
