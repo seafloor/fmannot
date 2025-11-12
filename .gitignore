@@ -1,0 +1,28 @@
+# api
+auth.yaml
+
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Notebooks
+.ipynb_checkpoints
+notebooks/.ipynb_checkpoints
+
+# Streamlit
+app/.streamlit/
+
+# data out
+out/
+*.feather
+*.zarr/
+
+# mac
+.DS_Store
