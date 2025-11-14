@@ -137,13 +137,11 @@ def save_all_effect_predictions(predicted_effects, snps, annot, store_path=OUT_V
 
     vep_out.to_feather(store_path)
     
-# saving functions
 def interval_to_str(interval_obj):
     d = interval_obj.to_interval_dict()
     
     return f"{d['chromosome']}:{d['start']}-{d['end']}:{d['strand']}"
 
-# reading functions
 def parse_interval_str(interval_str):
     interval_str = re.split(':|-', interval_str)
 
@@ -159,31 +157,27 @@ def parse_interval_str(interval_str):
 def save_track_data(zarr_group: zarr.Group, tdata: track_data.TrackData):
     """
     Saves a TrackData object (e.g., RNA_SEQ, ATAC) into a Zarr group
-    by saving its raw components. (Zarr v3 COMPLIANT)
+    by saving its raw components.
     """
     if tdata is None:
         print(f"  Warning: No TrackData provided for {zarr_group.name}")
         return
     
-    # 2. Extract data
     data_array = tdata.values
     
-    # Define chunking: chunk along the sequence, not the tracks
+    # chunk along the sequence, not the tracks
     data_chunks = (1024, data_array.shape[1]) 
-
-    # 3. Create the Array using the Zarr v3 API
-    #    Shape and dtype are inferred from data_array.
+    
+    # Shape and dtype are inferred from data_array.
     zarr_group.create_array(
         'values', 
         data=data_array,
         chunks=data_chunks
     )
     
-    # 4. Save all other components as attributes
     zarr_group.attrs['metadata_json'] = tdata.metadata.to_json(orient='records')
     zarr_group.attrs['resolution'] = tdata.resolution
     
-    # 5. Save interval components directly
     zarr_group.attrs['interval_chromosome'] = tdata.interval.chromosome
     zarr_group.attrs['interval_start'] = tdata.interval.start
     zarr_group.attrs['interval_end'] = tdata.interval.end
@@ -192,20 +186,17 @@ def save_track_data(zarr_group: zarr.Group, tdata: track_data.TrackData):
 def save_generic_data(zarr_group: zarr.Group, data_obj):
     """
     Saves non-TrackData objects (e.g., SpliceJunctions DataFrames)
-    as JSON attributes. (This function is v3 compatible).
+    as JSON attributes.
     """
     if data_obj is None:
         print(f"  Warning: No data provided for {zarr_group.name}")
         return
 
-    # 1. Save the main data (likely a pandas DataFrame)
     if hasattr(data_obj, 'to_json'):
         zarr_group.attrs['data_json'] = data_obj.to_json(orient='records')
     else:
-        # Fallback for any other type
         zarr_group.attrs['data_raw'] = str(data_obj)
         
-    # 2. Also save its interval if it has one (e.g., SpliceJunctions)
     if hasattr(data_obj, 'interval'):
         zarr_group.attrs['interval_chromosome'] = data_obj.interval.chromosome
         zarr_group.attrs['interval_start'] = data_obj.interval.start
@@ -227,12 +218,10 @@ def save_all_track_predictions(predicted_tracks, snps, store_path = OUT_GTP_LOCA
 
     with tqdm(predicted_tracks.items(), desc="Querying Alpha Genome API", total=len(predicted_tracks)) as pbar:
         for index, variant_output in pbar:
-            # 1. Get the matching variant info from 'snps' DataFrame
             try:
                 info_row = snps.loc[index]
-                variant_rsid = info_row['variant']  # e.g., 'rs4844610'
+                variant_rsid = info_row['variant']
                 
-                # Construct the AlphaGenome variant_id string
                 variant_id_str = (
                     f"chr{info_row['chr']}_"
                     f"{info_row['position_grch38']}_"
@@ -245,29 +234,23 @@ def save_all_track_predictions(predicted_tracks, snps, store_path = OUT_GTP_LOCA
             
             pbar.set_description(f"Processing variant: {variant_rsid} ({variant_id_str})")
         
-            # 2. Create the main group for this variant (e.g., '/rs4844610')
             variant_group = root_group.require_group(variant_rsid)
             variant_group.attrs['variant_id_string'] = variant_id_str
         
-            # 3. Iterate over ALL possible output types
             for output_name in ALL_OUTPUT_NAMES:
                 
-                # 4. Get the ref and alt objects (e.g., .reference.rna_seq)
                 ref_data = getattr(variant_output.reference, output_name, None)
                 alt_data = getattr(variant_output.alternate, output_name, None)
         
-                # 5. If data exists, create subgroups and save
                 if ref_data and alt_data:
                     output_group = variant_group.require_group(output_name.upper()) 
                     ref_group = output_group.require_group('REFERENCE')
                     alt_group = output_group.require_group('ALTERNATE')
                     
-                    # 6. Check if it's TrackData and save accordingly
                     if isinstance(ref_data, track_data.TrackData):
                         save_track_data(ref_group, ref_data)
                         save_track_data(alt_group, alt_data)
                     else:
-                        # It's a different type (e.g., SpliceJunctions DataFrame)
                         save_generic_data(ref_group, ref_data)
                         save_generic_data(alt_group, alt_data)
         
@@ -276,21 +259,16 @@ def save_all_track_predictions(predicted_tracks, snps, store_path = OUT_GTP_LOCA
 def load_track_data_from_zarr(zarr_group: zarr.Group) -> track_data.TrackData:
     """
     Re-hydrates a lazy-loaded TrackData object from a Zarr group.
-    This function is independent of the compression used.
     """
     if 'values' not in zarr_group:
         raise(f"Error: No 'values' array in Zarr group: {zarr_group.name}")
 
-    # 1. Load the values (this is a lazy Zarr array, not in memory)
-    # Zarr handles decompression automatically, regardless of what was used.
     values_array = zarr_group['values']
     
-    # 2. Load attributes from the group
     attrs = zarr_group.attrs
     metadata = pd.read_json(attrs['metadata_json'], orient='records')
     resolution = attrs['resolution']
     
-    # 3. Re-create the Interval object from components
     interval = genome.Interval(
         chromosome=attrs['interval_chromosome'],
         start=attrs['interval_start'],
@@ -298,7 +276,6 @@ def load_track_data_from_zarr(zarr_group: zarr.Group) -> track_data.TrackData:
         strand=attrs['interval_strand']
     )
     
-    # 4. Re-create the TrackData object
     reconstructed_tdata = track_data.TrackData(
         values=values_array,
         metadata=metadata,
@@ -309,20 +286,14 @@ def load_track_data_from_zarr(zarr_group: zarr.Group) -> track_data.TrackData:
     return reconstructed_tdata
 
 def read_tracks_for_variant(rsid, output_type = 'rna_seq', store_path = OUT_GTP_LOCAL_PATH):
-    # --- 3. OPEN THE ROOT STORE (THE "FILING CABINET") ---
-    # We use mode='r' for read-only, which is safer.
     root = zarr.open(store_path, mode='r')
     
-    # --- 5. DEFINE WHAT YOU WANT TO LOAD ---
-    # Let's say your user selected this from a dropdown in your dashboard:
-    selected_rsid = rsid     # (This must be a key you saved)
-    selected_output = output_type.upper()   # (This must be a key you saved)
+    selected_rsid = rsid
+    selected_output = output_type.upper()
     
-    # 3. Get the specific variant's group
     try:
         variant_group = root[selected_rsid]
     
-        # 4. Get the attribute from that group
         variant_id_str = variant_group.attrs['variant_id_string']
         
         print(f"Successfully found string for {selected_rsid}:")
@@ -333,15 +304,12 @@ def read_tracks_for_variant(rsid, output_type = 'rna_seq', store_path = OUT_GTP_
 
     variant = set_variant(var_str_to_dict(variant_id_str))
     
-    # --- 6. NAVIGATE TO THE SPECIFIC GROUPS ---
-    # This is the "Aha!" moment. We use the root object like a dictionary.
-    # These 'ref_group' and 'alt_group' are the zarr.Group objects we need.
+    # naviate to specific groups and get ref and alt seq track data
     try:
         ref_group = root[f'{selected_rsid}/{selected_output}/REFERENCE']
         alt_group = root[f'{selected_rsid}/{selected_output}/ALTERNATE']
     
-        # --- 7. NOW, CALL THE LOADER FUNCTION ---
-        # We pass the group objects, not the path string.
+        # load by passing the group objects, not the path string.
         ref_track_data = load_track_data_from_zarr(ref_group)
         alt_track_data = load_track_data_from_zarr(alt_group)
     
